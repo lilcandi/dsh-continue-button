@@ -51,7 +51,7 @@
     "name": "继续按钮",
     "version": "0.1.0",
     "compatibility": {
-      "dsh": ">=0.2.0-rc.1 <0.3.0-0",
+      "dsh": ">=0.2.0-rc.1 <0.2.1-0 || >=0.2.1-0 <0.3.0-0",
       "dshReleases": {
         "0.2.0-rc.1": "compatible",
         "0.2.0-rc.2": "compatible",

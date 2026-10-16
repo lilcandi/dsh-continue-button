@@ -1,0 +1,78 @@
+{
+  "name": "dsh-continue-button",
+  "version": "0.1.0",
+  "description": "A continue button beside the composer send key in the DSH Web GUI: one click writes an interruption-aware continuation prompt into the draft and submits it, so an interrupted task picks up where it stopped.",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "dsh-plugin",
+    "continue",
+    "composer",
+    "web-ui",
+    "resume",
+    "interrupt"
+  ],
+  "homepage": "https://github.com/lilcandi/dsh-continue-button#readme",
+  "bugs": {
+    "url": "https://github.com/lilcandi/dsh-continue-button/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lilcandi/dsh-continue-button.git"
+  },
+  "license": "MIT",
+  "author": "lilcandi",
+  "type": "module",
+  "engines": {
+    "dsh": ">=0.2.0-rc.1 <0.3.0-0"
+  },
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node test/load-check.mjs && node test/install-check.mjs",
+    "test:load": "node test/load-check.mjs",
+    "test:install": "node test/install-check.mjs"
+  },
+  "dsh": {
+    "id": "dsh-continue-button",
+    "name": "继续按钮",
+    "version": "0.1.0",
+    "compatibility": {
+      "dsh": ">=0.2.0-rc.1 <0.3.0-0",
+      "dshReleases": {
+        "0.2.0-rc.1": "compatible",
+        "0.2.0-rc.2": "compatible",
+        "0.2.1-alpha.2": "compatible",
+        "0.2.1-alpha.5": "compatible"
+      }
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": ">=0.2.0-rc.1 <0.3.0-0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh": {
+      "optional": true
+    }
+  }
+}

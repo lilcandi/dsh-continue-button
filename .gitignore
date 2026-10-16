@@ -1,0 +1,23 @@
+node_modules/
+.pnpm-store/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Playwright CLI scratch output (local probing only)
+.playwright-cli/
+playwright-report/
+test-results/
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.bak
+*.bak-*
+
+# Local scratch
+.tmp/
+*.log

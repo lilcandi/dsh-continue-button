@@ -1,0 +1,15 @@
+# dsh-continue-button bundle patch。
+#
+# 作用：把插件行插入 web profile 的插件名册。这一行是「裸插件名」形式：
+#   - 宿主半边（package.json 的 exports["."] → ./index.js）在 host 进程里执行；
+#   - package.json 的 dsh.client 声明让浏览器半边（exports["./client"] → ./client.js）
+#     由 @deepseek-ai/dsh-client-modules 扫描后经 /plugins/<id>/client.js 路由送进 Web GUI。
+#
+# 安装（在 profile 目录内）：
+#   dsh plugin --profile web add file:J:/plugin/dsh-continue-button
+# 或手工在 profiles/web/package.json 的 dependencies 里加
+#   "dsh-continue-button": "file:J:/plugin/dsh-continue-button"
+# 并把 "dsh-continue-button" 追加进 dsh.profile.bundles。
+- insert:
+    - id: dsh-continue-button
+      name: dsh-continue-button

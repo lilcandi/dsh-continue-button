@@ -75,7 +75,11 @@ and appends the name to the profile's `dsh.profile.bundles` list.
 
 **You must restart `dsh web` afterwards.** The browser-side bundle is discovered by
 `@deepseek-ai/dsh-client-modules`, which scans `dsh.client` declarations at host startup
-and composes the `__DSH_BOOT__` graph. A running process does not rescan.
+and composes the `__DSH_BOOT__` graph. A running process does not rescan the **profile
+roster**, so the first install always needs a restart.
+
+Once the plugin is mounted, further edits to `client.js` do **not** need a restart —
+see "Hot reload" below.
 
 ### Uninstall
 
@@ -168,7 +172,7 @@ A **second independent instance** was started on port 3099
 | Which slot | `data-slot = "conversation.input.activity"` |
 | Parent container | `uV2eYG_activity` (the official activity container) |
 | Gap to the send key | button x=1051 (w 28) → send key x=1091, **12px gap** |
-| End-to-end click | the continuation prompt entered the transcript as a real user message and the agent started working on it |
+| End-to-end click | after the click the page title became `继续。 【中断状态】上一回合 — DeepSeek Harness`; the draft was consumed and the continuation prompt entered the transcript |
 
 Measured positions (same row, ascending x):
 
@@ -176,8 +180,50 @@ Measured positions (same row, ascending x):
 add(429) → access mode(469) → credentials(581) → rewind(733) → model selector(803, w235) → 【continue】(1051, w28) → send(1091, w34)
 ```
 
+Screenshots: [docs/screenshot-composer.png](docs/screenshot-composer.png) (full composer, button outlined),
+[docs/screenshot-button.png](docs/screenshot-button.png) (card close-up).
+
+**The 3080 instance was also checked directly** — no guessing about whether a restart happened:
+
+```bash
+# fetch the bundle 3080 actually serves and compare it byte-for-byte with the on-disk copy
+curl -g -s -o served.js "http://127.0.0.1:3080/plugins/??dsh-continue-button/client.js&rev=<current rev>"
+node -e "const f=require('fs');const a=f.readFileSync('served.js'),b=f.readFileSync('<profile>/node_modules/dsh-continue-button/client.js');console.log('disk file is an exact prefix of served bytes:',a.subarray(0,b.length).equals(b))"
+# → true (the extra 76 trailing bytes are the sourceMappingURL comment)
+```
+
+Both instances (3080 and 3099) report the identical rev (`e42e71719f95`) over the
+`/plugins/events` SSE channel.
+
+### Hot reload (no restart needed for code edits)
+
+DSH ships `@deepseek-ai/dsh-client-hmr`: it **stat-polls every graph row's `client.js`
+every 500ms**, and when `mtimeMs / ctimeMs / size` changes it calls
+`clientModules.rebuilt(id)` to recompute the rev, then pushes
+`{type:'rebuilt', id, rev}` to the browser over `/plugins/events` (SSE). The browser half
+receives it and runs `entries.reload(id, rev)`, refetching and swapping that plugin.
+
+So the loop is:
+
+1. edit `client.js`;
+2. sync it to the copy the host actually serves:
+   `cp client.js <profile>/node_modules/dsh-continue-button/`;
+3. wait about a second (500ms poll plus one SSE round trip) — the browser swaps in the new
+   version on its own. **No restart, no page refresh.**
+
+The rev is derived from `mtime / ctime / size` only, never from content, so a write that
+changes content without changing any of the three goes unnoticed (a normal editor save
+cannot do that). To see the rev currently being served:
+
+```bash
+curl -g -s http://127.0.0.1:3080/plugins/events | grep dsh-continue-button
+```
+
 ### Known limits
 
+- The **first install** needs a restart: the profile roster (`dsh.profile.bundles`) is
+  scanned once at startup, and HMR only watches byte changes of rows **already in the
+  graph** — it will not discover a new plugin.
 - `client.js` edits must be synced to the installed copy under
   `<profile>/node_modules/dsh-continue-button/`; that is the file the host serves.
 - The plugin only targets the Web GUI (`platform: "web"`). It does nothing in the TUI.
@@ -188,7 +234,8 @@ add(429) → access mode(469) → credentials(581) → rewind(733) → model sel
 
 **Button does not appear** — check in order:
 
-1. Did you restart `dsh web`? (Without a restart it definitely will not appear.)
+1. Did you restart `dsh web` **for the first install**? (No restart means the roster lacks it,
+   so it definitely will not appear. After that, `client.js` edits need no restart — HMR swaps them.)
 2. Does `dsh --profile web --dump-config | grep continue-button` print anything?
    Nothing → the profile entry did not take; re-run the install command.
 3. Does the browser console show `[dsh-continue-button] client bundle 注册失败：…`?
@@ -222,7 +269,17 @@ silently inert; that is the intended degradation.
 - **Why a hand-written bundle**: for a pure client-side plugin the only benefit of a bundler
   is type checking, and the `@deepseek-ai/dsh-client-ui-slots` typings are only available from
   a vendored copy on this machine. The hand-written form is already proven in this
-  environment (`dsh-infinite-gen-5`) and needs zero build dependencies.
+  environment (`dsh-infinite-gen-5`) and needs zero build dependencies — and with DSH's
+  built-in `dsh-client-hmr`, syncing the installed copy hot-swaps it in about a second,
+  with no restart at all.
+- **Why `activity` rather than `input.right`**: `input.right` is a list slot and the safest
+  additive choice, but it renders inside `standardControls`, **left of the model selector** —
+  a 235px-wide model selector sits between it and the send key. `activity` renders to the
+  **right** of the model selector, immediately left of the stop/send keys (a 12px `trailing`
+  gap), which is what "beside the send key" actually means. The cost is that `activity` is a
+  `single` slot — a second registration at the same priority throws — so registration is
+  wrapped in try/catch and falls back to `input.right` after 2 seconds if the slot is occupied
+  or undeclared. Both paths work; the button's `data-slot` attribute states where it landed.
 
 ---
 

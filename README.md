@@ -69,7 +69,9 @@ dsh plugin --profile web add file:J:/plugin/dsh-continue-button
 
 装完后**必须重启 `dsh web`**：浏览器半边的 bundle 由宿主启动时的
 `@deepseek-ai/dsh-client-modules` 扫描 `dsh.client` 声明并合成 `__DSH_BOOT__` 图，
-运行中的进程不会重新扫描。
+运行中的进程不会重新扫描 **profile 名册**，所以首次安装必须重启。
+
+装完之后再改 `client.js` 就**不需要重启**了 —— 见下面「热更新」一节。
 
 ### 卸载
 
@@ -159,7 +161,7 @@ node C:\Users\candi\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh\lib\bin.js
 | 落在哪个槽 | `data-slot = "conversation.input.activity"` |
 | 祖父容器 | `uV2eYG_activity`（activity 槽的官方容器） |
 | 与发送键的间距 | 按钮 x=1051（宽 28）→ 发送键 x=1091，**间距 12px** |
-| 端到端点击 | 点击后续接指令作为真实用户消息进入 transcript，agent 随即开始执行 |
+| 端到端点击 | 点击后页面标题变为 `继续。 【中断状态】上一回合 — DeepSeek Harness`，草稿被消费、续接指令进入 transcript |
 
 实测位置序列（同一行，x 升序）：
 
@@ -167,11 +169,44 @@ node C:\Users\candi\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh\lib\bin.js
 添加(429) → 访问模式(469) → 凭据(581) → 回退(733) → 模型选择器(803,宽235) → 【继续】(1051,宽28) → 发送(1091,宽34)
 ```
 
-截图存证：`J:\plugin\.playwright-cli\page-2026-10-16T17-17-26-207Z.png`（按钮加 3px 红框标记）。
+截图：[docs/screenshot-composer.png](docs/screenshot-composer.png)（composer 全栈，按钮带红框）、
+[docs/screenshot-button.png](docs/screenshot-button.png)（卡片特写）。
+
+**另外核对了「3080 主实例服务的就是这份代码」**（不依赖重启与否的猜测）：
+
+```powershell
+# 从 3080 拉下它实际服务的 bundle，与磁盘副本逐字节比对
+curl.exe -g -s -o served.js "http://127.0.0.1:3080/plugins/??dsh-continue-button/client.js&rev=<当前 rev>"
+node -e "const f=require('fs');const a=f.readFileSync('served.js'),b=f.readFileSync('<profile>/node_modules/dsh-continue-button/client.js');console.log('磁盘文件是服务字节的精确前缀:',a.subarray(0,b.length).equals(b))"
+# → true（尾部多出的 76 字节是 sourceMappingURL 注释）
+```
+
+两个实例（3080 与 3099）在 `/plugins/events` SSE 里报告的 rev 也完全一致（`e42e71719f95`）。
+
+### 热更新（改完不用重启）
+
+DSH 自带 `@deepseek-ai/dsh-client-hmr`：它以 **500ms 间隔 stat 轮询**每个 graph row 的
+`client.js`，发现 `mtimeMs / ctimeMs / size` 任一变化就调 `clientModules.rebuilt(id)`
+重算 rev，再通过 `/plugins/events`（SSE）把 `{type:'rebuilt', id, rev}` 推给浏览器；
+浏览器半边收到后走 `entries.reload(id, rev)`，重新拉取并替换该插件。
+
+所以流程是：
+
+1. 改 `J:\plugin\dsh-continue-button\client.js`；
+2. 同步到宿主真正加载的那份：`Copy-Item client.js C:\Users\candi\.dsh\profiles\web\node_modules\dsh-continue-button\ -Force`；
+3. 等约 1 秒（500ms 轮询 + 一次 SSE 往返），浏览器自动换新版 —— **不用重启，不用刷新页面**。
+
+rev 只由 `mtime / ctime / size` 决定，不哈希内容 —— 所以「内容变了但三者都没变」的写入不会被发现
+（正常编辑不会发生）。想确认当前服务的 rev：
+
+```powershell
+curl.exe -g -s "http://127.0.0.1:3080/plugins/events" | Select-String "dsh-continue-button"
+```
 
 ### 仍受限制的部分
 
-- 用户当前运行的 3080 实例里**没有**这个 bundle（它启动早于插件安装）。需重启 `dsh web` 才会出现。
+- **首次安装**必须重启 `dsh web`：profile 名册（`dsh.profile.bundles`）只在启动时扫描一次，
+  HMR 只管**已在 graph 里**的 row 的字节变化，不会发现新插件。
 - `client.js` 的改动必须同步到 `profiles/web/node_modules/dsh-continue-button/` 才会被加载
   （本次已同步，SHA256 一致）。若直接改源文件而忘了同步，宿主读到的仍是旧副本。
 
@@ -181,7 +216,7 @@ node C:\Users\candi\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh\lib\bin.js
 
 **按钮没出现**，按顺序查：
 
-1. 重启过 `dsh web` 了吗？（未重启 = 一定不出现）
+1. **首次安装**重启过 `dsh web` 了吗？（未重启 = 名册里没有 = 一定不出现。装好之后再改 `client.js` 不必重启，HMR 会热更新）
 2. `dsh --profile web --dump-config | Select-String continue-button` 有没有输出？
    没有 → profile 登记没生效，重跑安装命令。
 3. 浏览器控制台有没有 `[dsh-continue-button] client bundle 注册失败：…`？
@@ -209,4 +244,10 @@ node C:\Users\candi\AppData\Roaming\npm\node_modules\@deepseek-ai\dsh\lib\bin.js
   且不会引入 IO 失败面。
 - **为什么手写 bundle**：纯客户端插件用 tsdown 打包的唯一收益是类型检查，而
   `@deepseek-ai/dsh-client-ui-slots` 等类型包在本机只能靠 vendored 副本提供；
-  手写形态与 `dsh-infinite-gen-5` 已在同机验证可行，且零构建依赖、改完即生效（重启后）。
+  手写形态与 `dsh-infinite-gen-5` 已在同机验证可行，且零构建依赖 —— 配合 DSH 自带的
+  `dsh-client-hmr`，改完同步副本约一秒即热更新，连重启都不需要。
+- **为什么落在 `activity` 而不是 `input.right`**：`input.right` 是 list 槽、加法式最安全，
+  但它渲染在 `standardControls` 里、**模型选择器左侧**，与发送键隔着一个 235px 宽的模型选择器；
+  `activity` 渲染在模型选择器**右侧**、停止/发送键正左侧（`trailing` 的 12px gap），才真的算「发送键旁」。
+  代价是 `activity` 是 `single` 槽 —— 同 priority 二次注册会 throw，所以注册包在 try/catch 里，
+  失败或槽位未声明时 2 秒后回退到 `input.right`（两条路径都可用，按钮的 `data-slot` 属性会写明实际落点）。
